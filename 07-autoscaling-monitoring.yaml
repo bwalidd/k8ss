@@ -1,0 +1,365 @@
+# 07-autoscaling-monitoring.yaml
+# HPA and Monitoring Configuration
+
+# Autoscaler for Django Backends (GPU-aware)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: django-backend-hpa
+  namespace: face-recognition-system
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: django-backend-gpu0  # Can create separate HPAs for each GPU
+  minReplicas: 1
+  maxReplicas: 2  # Limited by GPU availability
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+---
+# Frontend Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: frontend-hpa
+  namespace: face-recognition-system
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: react-frontend
+  minReplicas: 1
+  maxReplicas: 4
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+
+---
+# Celery Worker Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: celery-hpa
+  namespace: face-recognition-system
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: celery-worker
+  minReplicas: 1
+  maxReplicas: 4
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 75
+
+---
+# ConfigMap for System Status and Monitoring
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: system-status-config
+  namespace: face-recognition-system
+data:
+  endpoints.json: |
+    {
+      "gpu_backends": {
+        "gpu0": "http://NODE_IP:30801",
+        "gpu1": "http://NODE_IP:30802", 
+        "gpu2": "http://NODE_IP:30803",
+        "gpu3": "http://NODE_IP:30804"
+      },
+      "services": {
+        "frontend": "http://NODE_IP:30999",
+        "load_balancer": "http://NODE_IP:30898",
+        "celery_monitor": "http://NODE_IP:30557"
+      },
+      "streaming": {
+        "mediamtx_primary": "rtsp://NODE_IP:30554",
+        "mediamtx_secondary": "rtsp://NODE_IP:30555", 
+        "mediamtx_normal": "rtsp://NODE_IP:30556"
+      },
+      "external_data": {
+        "postgres": "postgresql://FaceApi:example@NODE_IP:30432/FaceApi",
+        "redis": "redis://:admin@NODE_IP:30379/0",
+        "redis_channels": "redis://:admin@NODE_IP:30380/0"
+      }
+    }
+  
+  docker_compose_mapping.txt: |
+    Docker Compose → Kubernetes Port Mapping:
+    ==========================================
+    
+    Django Backend:
+    - Docker: 9898:9898 → K8s: 30898 (load balancer)
+    - GPU 0: 30801, GPU 1: 30802, GPU 2: 30803, GPU 3: 30804
+    
+    Frontend:
+    - Docker: 9999:9999 → K8s: 30999:9999
+    
+    PostgreSQL:
+    - Docker: 5432:5432 → K8s: 30432:5432 (external), 5432 (internal)
+    
+    Redis:
+    - Docker: 6379:6379 → K8s: 30379:6379 (external), 6379 (internal)
+    - Docker: 6380:6380 → K8s: 30380:6380 (external), 6380 (internal)
+    
+    MediaMTX:
+    - Docker: 8554:8554 → K8s: 30554:8554
+    - Docker: 8555:8554 → K8s: 30555:8554  
+    - Docker: 8556:8554 → K8s: 30556:8554
+    
+    Celery Monitor:
+    - Docker: 5555:5555 → K8s: 30557:5555
+    
+    COTURN:
+    - Docker: host network → K8s: hostNetwork: true
+    
+    Janus:
+    - Docker: host network → K8s: hostNetwork: true
+
+  frontend-connection-config.js: |
+    // Frontend GPU Connection Configuration
+    const GPU_CONFIG = {
+      endpoints: {
+        0: 'http://NODE_IP:30801',  // GPU 0 - RTX 2080 Ti
+        1: 'http://NODE_IP:30802',  // GPU 1 - RTX 2080 Ti
+        2: 'http://NODE_IP:30803',  // GPU 2 - RTX 2080 Super
+        3: 'http://NODE_IP:30804'   // GPU 3 - RTX 2080 Super
+      },
+      discovery: 'http://NODE_IP:30898',  // Load balancer for discovery only
+      
+      // Connection strategy
+      selectGPU: function(gpuId) {
+        sessionStorage.setItem('selectedGPU', gpuId);
+        return this.endpoints[gpuId];
+      },
+      
+      // Make API call to specific GPU
+      callGPU: async function(gpuId, apiPath, data) {
+        const endpoint = this.endpoints[gpuId];
+        return fetch(`${endpoint}${apiPath}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-GPU-ID': gpuId.toString()
+          },
+          body: JSON.stringify(data)
+        });
+      }
+    };
+
+---
+# GPU Status Monitor Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gpu-status-monitor
+  namespace: face-recognition-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gpu-status-monitor
+  template:
+    metadata:
+      labels:
+        app: gpu-status-monitor
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # Worker node
+      containers:
+      - name: monitor
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: monitor-content
+          mountPath: /usr/share/nginx/html
+      volumes:
+      - name: monitor-content
+        configMap:
+          name: gpu-monitor-page
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gpu-monitor-page
+  namespace: face-recognition-system
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>4-GPU Face Recognition System Monitor</title>
+        <meta http-equiv="refresh" content="15">
+        <style>
+            body { 
+                font-family: Arial, sans-serif; 
+                margin: 0; 
+                padding: 20px; 
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                min-height: 100vh;
+            }
+            .container { max-width: 1200px; margin: 0 auto; }
+            .header { 
+                text-align: center; 
+                margin-bottom: 30px; 
+                background: rgba(255,255,255,0.1);
+                padding: 20px; 
+                border-radius: 10px; 
+            }
+            .gpu-grid { 
+                display: grid; 
+                grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); 
+                gap: 20px; 
+                margin-bottom: 30px;
+            }
+            .gpu-card { 
+                background: rgba(255,255,255,0.1); 
+                padding: 20px; 
+                border-radius: 10px; 
+                backdrop-filter: blur(10px);
+                border: 2px solid;
+            }
+            .gpu-master { border-color: #FFD700; }
+            .gpu-worker { border-color: #4CAF50; }
+            .status-active { color: #4CAF50; }
+            .status-busy { color: #FF9800; }
+            .status-error { color: #f44336; }
+            .endpoints { 
+                background: rgba(0,0,0,0.3); 
+                padding: 20px; 
+                border-radius: 10px; 
+                margin-top: 20px; 
+            }
+            .endpoint-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                gap: 15px;
+                margin-top: 15px;
+            }
+            .endpoint-card {
+                background: rgba(255,255,255,0.1);
+                padding: 15px;
+                border-radius: 8px;
+                font-family: monospace;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>🎯 4-GPU Face Recognition System</h1>
+                <p>Real-time monitoring of all GPU backend instances</p>
+                <p>Auto-refresh every 15 seconds</p>
+            </div>
+            
+            <div class="gpu-grid">
+                <div class="gpu-card gpu-master">
+                    <h3>🖥️ GPU 0 - Master Node</h3>
+                    <p><strong>Type:</strong> RTX 2080 Ti (11GB)</p>
+                    <p><strong>Status:</strong> <span class="status-active">ACTIVE</span></p>
+                    <p><strong>Endpoint:</strong> :30801</p>
+                    <p><strong>Instance:</strong> django-backend-gpu0</p>
+                </div>
+                
+                <div class="gpu-card gpu-master">
+                    <h3>🖥️ GPU 1 - Master Node</h3>
+                    <p><strong>Type:</strong> RTX 2080 Ti (11GB)</p>
+                    <p><strong>Status:</strong> <span class="status-active">ACTIVE</span></p>
+                    <p><strong>Endpoint:</strong> :30802</p>
+                    <p><strong>Instance:</strong> django-backend-gpu1</p>
+                </div>
+                
+                <div class="gpu-card gpu-worker">
+                    <h3>⚙️ GPU 2 - Worker Node</h3>
+                    <p><strong>Type:</strong> RTX 2080 Super (8GB)</p>
+                    <p><strong>Status:</strong> <span class="status-active">ACTIVE</span></p>
+                    <p><strong>Endpoint:</strong> :30803</p>
+                    <p><strong>Instance:</strong> django-backend-gpu2</p>
+                </div>
+                
+                <div class="gpu-card gpu-worker">
+                    <h3>⚙️ GPU 3 - Worker Node</h3>
+                    <p><strong>Type:</strong> RTX 2080 Super (8GB)</p>
+                    <p><strong>Status:</strong> <span class="status-active">ACTIVE</span></p>
+                    <p><strong>Endpoint:</strong> :30804</p>
+                    <p><strong>Instance:</strong> django-backend-gpu3</p>
+                </div>
+            </div>
+            
+            <div class="endpoints">
+                <h3>📡 System Endpoints</h3>
+                <div class="endpoint-grid">
+                    <div class="endpoint-card">
+                        <strong>GPU Backends:</strong><br>
+                        GPU 0: http://NODE_IP:30801<br>
+                        GPU 1: http://NODE_IP:30802<br>
+                        GPU 2: http://NODE_IP:30803<br>
+                        GPU 3: http://NODE_IP:30804
+                    </div>
+                    
+                    <div class="endpoint-card">
+                        <strong>Main Services:</strong><br>
+                        Frontend: http://NODE_IP:30999<br>
+                        Load Balancer: http://NODE_IP:30898<br>
+                        Celery Monitor: http://NODE_IP:30557
+                    </div>
+                    
+                    <div class="endpoint-card">
+                        <strong>Video Streaming:</strong><br>
+                        MediaMTX 1: rtsp://NODE_IP:30554<br>
+                        MediaMTX 2: rtsp://NODE_IP:30555<br>
+                        MediaMTX 3: rtsp://NODE_IP:30556
+                    </div>
+                    
+                    <div class="endpoint-card">
+                        <strong>External Data:</strong><br>
+                        PostgreSQL: NODE_IP:30432<br>
+                        Redis: NODE_IP:30379<br>
+                        Redis Channels: NODE_IP:30380
+                    </div>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+
+---
+# GPU Status Monitor Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: gpu-status-monitor-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: gpu-status-monitor
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+    nodePort: 30900
+  type: NodePort

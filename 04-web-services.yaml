@@ -1,0 +1,87 @@
+# 04-web-services.yaml
+# Frontend, Celery, and Web Services
+
+# React Frontend - Worker Node
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: react-frontend
+  namespace: face-recognition-system
+  labels:
+    app: react-frontend
+    component: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: react-frontend
+  template:
+    metadata:
+      labels:
+        app: react-frontend
+        component: frontend
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # Worker node
+      containers:
+      - name: frontend
+        image: djangoreactfacerec-front
+        ports:
+        - containerPort: 9999
+        env:
+        - name: CHOKIDAR_USEPOLLING
+          value: "true"
+        resources:
+          limits:
+            cpu: "1000m"
+            memory: "512Mi"
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+
+---
+# Celery Worker - Worker Node
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-worker
+  namespace: face-recognition-system
+  labels:
+    app: celery-worker
+    component: worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: celery-worker
+  template:
+    metadata:
+      labels:
+        app: celery-worker
+        component: worker
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # Worker node
+      containers:
+      - name: celery-worker
+        image: djangoreactfacerec-flower-celery
+        ports:
+        - containerPort: 5555
+        env:
+        - name: CELERY_BROKER_URL
+          value: "redis://:admin@redis-primary-service:6379/0"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_PASSWORD
+        envFrom:
+        - configMapRef:
+            name: app-config
+        resources:
+          limits:
+            cpu: "1000m"
+            memory: "2Gi"
+          requests:
+            cpu: "500m"
+            memory: "1Gi"

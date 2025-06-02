@@ -1,0 +1,369 @@
+# 02-gpu-backends.yaml
+# Django Backend GPU Deployments (4 instances)
+
+# Django Backend GPU 0 - Master Node
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: django-backend-gpu0
+  namespace: face-recognition-system
+  labels:
+    app: django-backend
+    gpu-id: "gpu0"
+    component: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: django-backend
+      gpu-id: "gpu0"
+  template:
+    metadata:
+      labels:
+        app: django-backend
+        gpu-id: "gpu0"
+        component: backend
+        node-type: "master"
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedove2-ms-7b98
+      containers:
+      - name: django-backend
+        image: djangoreactfacerec-backend
+        ports:
+        - containerPort: 9898
+        - containerPort: 6006  # TensorBoard
+        - containerPort: 8888  # Jupyter
+        env:
+        - name: CUDA_VISIBLE_DEVICES
+          value: "0"
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "0"
+        - name: GPU_ID
+          value: "0"
+        - name: NODE_TYPE
+          value: "master"
+        - name: BACKEND_INSTANCE
+          value: "gpu0"
+        - name: GPU_TYPE
+          value: "RTX 2080 Ti"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_USER
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_DB
+        - name: DJANGO_SUPERUSER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: DJANGO_SUPERUSER_PASSWORD
+        envFrom:
+        - configMapRef:
+            name: app-config
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+            cpu: "4000m"
+            memory: "8Gi"
+          requests:
+            nvidia.com/gpu: 1
+            cpu: "2000m"
+            memory: "4Gi"
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 9898
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9898
+          initialDelaySeconds: 60
+          periodSeconds: 30
+
+---
+# Django Backend GPU 1 - Master Node
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: django-backend-gpu1
+  namespace: face-recognition-system
+  labels:
+    app: django-backend
+    gpu-id: "gpu1"
+    component: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: django-backend
+      gpu-id: "gpu1"
+  template:
+    metadata:
+      labels:
+        app: django-backend
+        gpu-id: "gpu1"
+        component: backend
+        node-type: "master"
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedove2-ms-7b98
+      containers:
+      - name: django-backend
+        image: djangoreactfacerec-backend
+        ports:
+        - containerPort: 9898
+        - containerPort: 6006
+        - containerPort: 8888
+        env:
+        - name: CUDA_VISIBLE_DEVICES
+          value: "1"
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "1"
+        - name: GPU_ID
+          value: "1"
+        - name: NODE_TYPE
+          value: "master"
+        - name: BACKEND_INSTANCE
+          value: "gpu1"
+        - name: GPU_TYPE
+          value: "RTX 2080 Ti"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_USER
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_DB
+        - name: DJANGO_SUPERUSER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: DJANGO_SUPERUSER_PASSWORD
+        envFrom:
+        - configMapRef:
+            name: app-config
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+            cpu: "4000m"
+            memory: "8Gi"
+          requests:
+            nvidia.com/gpu: 1
+            cpu: "2000m"
+            memory: "4Gi"
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 9898
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9898
+          initialDelaySeconds: 60
+          periodSeconds: 30
+
+---
+# Django Backend GPU 2 - Worker Node
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: django-backend-gpu2
+  namespace: face-recognition-system
+  labels:
+    app: django-backend
+    gpu-id: "gpu2"
+    component: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: django-backend
+      gpu-id: "gpu2"
+  template:
+    metadata:
+      labels:
+        app: django-backend
+        gpu-id: "gpu2"
+        component: backend
+        node-type: "worker"
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98
+      containers:
+      - name: django-backend
+        image: djangoreactfacerec-backend
+        ports:
+        - containerPort: 9898
+        - containerPort: 6006
+        - containerPort: 8888
+        env:
+        - name: CUDA_VISIBLE_DEVICES
+          value: "0"
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "0"
+        - name: GPU_ID
+          value: "2"
+        - name: NODE_TYPE
+          value: "worker"
+        - name: BACKEND_INSTANCE
+          value: "gpu2"
+        - name: GPU_TYPE
+          value: "RTX 2080 Super"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_USER
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_DB
+        - name: DJANGO_SUPERUSER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: DJANGO_SUPERUSER_PASSWORD
+        envFrom:
+        - configMapRef:
+            name: app-config
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+            cpu: "4000m"
+            memory: "8Gi"
+          requests:
+            nvidia.com/gpu: 1
+            cpu: "2000m"
+            memory: "4Gi"
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 9898
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9898
+          initialDelaySeconds: 60
+          periodSeconds: 30
+
+---
+# Django Backend GPU 3 - Worker Node
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: django-backend-gpu3
+  namespace: face-recognition-system
+  labels:
+    app: django-backend
+    gpu-id: "gpu3"
+    component: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: django-backend
+      gpu-id: "gpu3"
+  template:
+    metadata:
+      labels:
+        app: django-backend
+        gpu-id: "gpu3"
+        component: backend
+        node-type: "worker"
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98
+      containers:
+      - name: django-backend
+        image: djangoreactfacerec-backend
+        ports:
+        - containerPort: 9898
+        - containerPort: 6006
+        - containerPort: 8888
+        env:
+        - name: CUDA_VISIBLE_DEVICES
+          value: "1"
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "1"
+        - name: GPU_ID
+          value: "3"
+        - name: NODE_TYPE
+          value: "worker"
+        - name: BACKEND_INSTANCE
+          value: "gpu3"
+        - name: GPU_TYPE
+          value: "RTX 2080 Super"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_USER
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_DB
+        - name: DJANGO_SUPERUSER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: DJANGO_SUPERUSER_PASSWORD
+        envFrom:
+        - configMapRef:
+            name: app-config
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+            cpu: "4000m"
+            memory: "8Gi"
+          requests:
+            nvidia.com/gpu: 1
+            cpu: "2000m"
+            memory: "4Gi"
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 9898
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9898
+          initialDelaySeconds: 60
+          periodSeconds: 30

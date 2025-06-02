@@ -1,0 +1,226 @@
+# 05-streaming-services.yaml
+# MediaMTX, Janus, and COTURN Services
+
+# MediaMTX Primary - Worker Node (port 8554)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mediamtx-primary
+  namespace: face-recognition-system
+  labels:
+    app: mediamtx
+    component: streaming
+    instance: primary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mediamtx
+      instance: primary
+  template:
+    metadata:
+      labels:
+        app: mediamtx
+        component: streaming
+        instance: primary
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # Worker node
+      containers:
+      - name: mediamtx
+        image: bluenviron/mediamtx:latest
+        ports:
+        - containerPort: 8554
+        resources:
+          limits:
+            cpu: "2000m"
+            memory: "2Gi"
+          requests:
+            cpu: "1000m"
+            memory: "1Gi"
+
+---
+# MediaMTX Secondary - Worker Node (port 8555 internal, 8554 container)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mediamtx-secondary
+  namespace: face-recognition-system
+  labels:
+    app: mediamtx
+    component: streaming
+    instance: secondary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mediamtx
+      instance: secondary
+  template:
+    metadata:
+      labels:
+        app: mediamtx
+        component: streaming
+        instance: secondary
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # Worker node
+      containers:
+      - name: mediamtx
+        image: bluenviron/mediamtx:latest
+        ports:
+        - containerPort: 8554
+        resources:
+          limits:
+            cpu: "1500m"
+            memory: "1Gi"
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+
+---
+# MediaMTX Normal Stream - Worker Node (port 8556 internal, 8554 container)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mediamtx-normal
+  namespace: face-recognition-system
+  labels:
+    app: mediamtx
+    component: streaming
+    instance: normal
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mediamtx
+      instance: normal
+  template:
+    metadata:
+      labels:
+        app: mediamtx
+        component: streaming
+        instance: normal
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # Worker node
+      containers:
+      - name: mediamtx
+        image: bluenviron/mediamtx:latest
+        ports:
+        - containerPort: 8554
+        resources:
+          limits:
+            cpu: "1500m"
+            memory: "1Gi"
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+
+---
+# Janus Gateway - Worker Node (host network mode)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: janus-gateway
+  namespace: face-recognition-system
+  labels:
+    app: janus-gateway
+    component: signaling
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: janus-gateway
+  template:
+    metadata:
+      labels:
+        app: janus-gateway
+        component: signaling
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # Worker node
+      hostNetwork: true  # Equivalent to network_mode: "host"
+      containers:
+      - name: janus
+        image: canyan/janus-gateway:master
+        ports:
+        - containerPort: 8088
+        resources:
+          limits:
+            cpu: "2000m"
+            memory: "2Gi"
+          requests:
+            cpu: "1000m"
+            memory: "1Gi"
+        readinessProbe:
+          httpGet:
+            path: /janus/info
+            port: 8088
+          initialDelaySeconds: 40
+          periodSeconds: 30
+        livenessProbe:
+          httpGet:
+            path: /janus/info
+            port: 8088
+          initialDelaySeconds: 60
+          periodSeconds: 30
+
+---
+# COTURN Server - Worker Node (host network with expanded ports)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coturn-server
+  namespace: face-recognition-system
+  labels:
+    app: coturn
+    component: networking
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: coturn
+  template:
+    metadata:
+      labels:
+        app: coturn
+        component: networking
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # Worker node
+      hostNetwork: true  # Equivalent to network_mode: "host"
+      containers:
+      - name: coturn
+        image: coturn/coturn:latest
+        env:
+        - name: TZ
+          value: "UTC"
+        - name: EXTERNAL_IP
+          value: "34.60.157.241"  # Your stream IP
+        ports:
+        - containerPort: 3478
+          protocol: TCP
+        - containerPort: 3478
+          protocol: UDP
+        - containerPort: 5349
+          protocol: TCP
+        - containerPort: 5349
+          protocol: UDP
+        resources:
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+        readinessProbe:
+          tcpSocket:
+            port: 3478
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 3478
+          initialDelaySeconds: 30
+          periodSeconds: 30

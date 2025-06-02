@@ -1,0 +1,304 @@
+# 06-services.yaml
+# All Kubernetes Services
+
+# Django Backend GPU Services (Individual GPU endpoints)
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-gpu0-service
+  namespace: face-recognition-system
+  labels:
+    gpu-id: "gpu0"
+    service-type: "direct-gpu"
+spec:
+  selector:
+    app: django-backend
+    gpu-id: "gpu0"
+  ports:
+  - protocol: TCP
+    port: 9898
+    targetPort: 9898
+    nodePort: 30801
+    name: http
+  type: NodePort
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 3600
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-gpu1-service
+  namespace: face-recognition-system
+  labels:
+    gpu-id: "gpu1"
+    service-type: "direct-gpu"
+spec:
+  selector:
+    app: django-backend
+    gpu-id: "gpu1"
+  ports:
+  - protocol: TCP
+    port: 9898
+    targetPort: 9898
+    nodePort: 30802
+    name: http
+  type: NodePort
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 3600
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-gpu2-service
+  namespace: face-recognition-system
+  labels:
+    gpu-id: "gpu2"
+    service-type: "direct-gpu"
+spec:
+  selector:
+    app: django-backend
+    gpu-id: "gpu2"
+  ports:
+  - protocol: TCP
+    port: 9898
+    targetPort: 9898
+    nodePort: 30803
+    name: http
+  type: NodePort
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 3600
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-gpu3-service
+  namespace: face-recognition-system
+  labels:
+    gpu-id: "gpu3"
+    service-type: "direct-gpu"
+spec:
+  selector:
+    app: django-backend
+    gpu-id: "gpu3"
+  ports:
+  - protocol: TCP
+    port: 9898
+    targetPort: 9898
+    nodePort: 30804
+    name: http
+  type: NodePort
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 3600
+
+---
+# Main Backend Load Balancer (Discovery Only)
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-loadbalancer-service
+  namespace: face-recognition-system
+  labels:
+    service-type: "discovery-only"
+spec:
+  selector:
+    app: django-backend
+  ports:
+  - protocol: TCP
+    port: 9898
+    targetPort: 9898
+    nodePort: 30898
+    name: http
+  type: NodePort
+
+---
+# Frontend Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: react-frontend
+  ports:
+  - protocol: TCP
+    port: 9999
+    targetPort: 9999
+    nodePort: 30999
+  type: NodePort
+
+---
+# MediaMTX Services (matching Docker Compose ports)
+apiVersion: v1
+kind: Service
+metadata:
+  name: mediamtx-primary-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: mediamtx
+    instance: primary
+  ports:
+  - protocol: TCP
+    port: 8554
+    targetPort: 8554
+    nodePort: 30554  # Maps to original port 8554
+  type: NodePort
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mediamtx-secondary-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: mediamtx
+    instance: secondary
+  ports:
+  - protocol: TCP
+    port: 8554
+    targetPort: 8554
+    nodePort: 30555  # Maps to original port 8555
+  type: NodePort
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mediamtx-normal-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: mediamtx
+    instance: normal
+  ports:
+  - protocol: TCP
+    port: 8554
+    targetPort: 8554
+    nodePort: 30556  # Maps to original port 8556
+  type: NodePort
+
+---
+# Celery Monitor Service (Flower)
+apiVersion: v1
+kind: Service
+metadata:
+  name: celery-monitor-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: celery-worker
+  ports:
+  - protocol: TCP
+    port: 5555
+    targetPort: 5555
+    nodePort: 30557  # Changed from 30555 to avoid conflict
+  type: NodePort
+
+---
+# Internal Services (ClusterIP) - Match Docker Compose networking
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: postgresql
+  ports:
+  - protocol: TCP
+    port: 5432
+    targetPort: 5432
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-primary-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: redis-primary
+  ports:
+  - protocol: TCP
+    port: 6379
+    targetPort: 6379
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-channels-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: redis-channels
+  ports:
+  - protocol: TCP
+    port: 6380
+    targetPort: 6380
+  type: ClusterIP
+
+---
+# External Redis Services (matching Docker Compose external ports)
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-external-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: redis-primary
+  ports:
+  - protocol: TCP
+    port: 6379
+    targetPort: 6379
+    nodePort: 30379  # External access to Redis
+  type: NodePort
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-channels-external-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: redis-channels
+  ports:
+  - protocol: TCP
+    port: 6380
+    targetPort: 6380
+    nodePort: 30380  # External access to Redis Channels
+  type: NodePort
+
+---
+# PostgreSQL External Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-external-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: postgresql
+  ports:
+  - protocol: TCP
+    port: 5432
+    targetPort: 5432
+    nodePort: 30432  # External access to PostgreSQL
+  type: NodePort
