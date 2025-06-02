@@ -1,0 +1,2198 @@
+# Complete Face Recognition System Deployment
+# 4-GPU Django Backend + All Supporting Services
+# Updated with correct ports, passwords, and Redis configuration
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: face-recognition-system
+  labels:
+    name: face-recognition-system
+
+---
+# ConfigMap for shared configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: face-recognition-system
+data:
+  REDIS_URL: "redis://:admin@redis-primary-service:6379/0"
+  REDIS_CHANNEL_URL: "redis://:admin@redis-channels-service:6380/0"
+  DATABASE_URL: "postgresql://FaceApi:example@postgres-service:5432/FaceApi"
+  CELERY_BROKER_URL: "redis://:admin@redis-primary-service:6379/0"
+  CELERY_RESULT_BACKEND: "redis://:admin@redis-primary-service:6379/0"
+  DJANGO_SUPERUSER_USERNAME: "bluedove"
+  DJANGO_SUPERUSER_EMAIL: "root@root.com"
+  STREAM_IP: "34.60.157.241"
+  STREAM_PORT: "8555"
+  STREAM_PROTOCOL: "rtmp"
+
+---
+# Secrets for sensitive data
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app-secrets
+  namespace: face-recognition-system
+type: Opaque
+data:
+  POSTGRES_PASSWORD: ZXhhbXBsZQ==  # base64 encoded "example"
+  POSTGRES_USER: RmFjZUFwaQ==  # base64 encoded "FaceApi"
+  POSTGRES_DB: RmFjZUFwaQ==  # base64 encoded "FaceApi"
+  DJANGO_SUPERUSER_PASSWORD: Qmx1ZWRvdmUxMjM0  # base64 encoded "Bluedove1234"
+  REDIS_PASSWORD: YWRtaW4=  # base64 encoded "admin"
+
+---
+# =====================================================
+# DJANGO BACKEND - 4 GPU INSTANCES
+# =====================================================
+
+# Django Backend GPU 0 - Master Node
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: django-backend-gpu0
+  namespace: face-recognition-system
+  labels:
+    app: django-backend
+    gpu-id: "gpu0"
+    component: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: django-backend
+      gpu-id: "gpu0"
+  template:
+    metadata:
+      labels:
+        app: django-backend
+        gpu-id: "gpu0"
+        component: backend
+        node-type: "master"
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedove2-ms-7b98
+      containers:
+      - name: django-backend
+        image: bwalidd/new-django:backend-v2
+        ports:
+        - containerPort: 9898
+        - containerPort: 6006  # TensorBoard
+        - containerPort: 8888  # Jupyter
+        env:
+        - name: CUDA_VISIBLE_DEVICES
+          value: "0"
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "0"
+        - name: GPU_ID
+          value: "0"
+        - name: NODE_TYPE
+          value: "master"
+        - name: BACKEND_INSTANCE
+          value: "gpu0"
+        - name: GPU_TYPE
+          value: "RTX 2080 Ti"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_USER
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_DB
+        - name: DJANGO_SUPERUSER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: DJANGO_SUPERUSER_PASSWORD
+        envFrom:
+        - configMapRef:
+            name: app-config
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+            cpu: "4000m"
+            memory: "8Gi"
+          requests:
+            nvidia.com/gpu: 1
+            cpu: "2000m"
+            memory: "4Gi"
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 9898
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9898
+          initialDelaySeconds: 60
+          periodSeconds: 30
+
+---
+# Django Backend GPU 1 - Master Node
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: django-backend-gpu1
+  namespace: face-recognition-system
+  labels:
+    app: django-backend
+    gpu-id: "gpu1"
+    component: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: django-backend
+      gpu-id: "gpu1"
+  template:
+    metadata:
+      labels:
+        app: django-backend
+        gpu-id: "gpu1"
+        component: backend
+        node-type: "master"
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedove2-ms-7b98
+      containers:
+      - name: django-backend
+        image: bwalidd/new-django:backend-v2
+        ports:
+        - containerPort: 9898
+        - containerPort: 6006
+        - containerPort: 8888
+        env:
+        - name: CUDA_VISIBLE_DEVICES
+          value: "1"
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "1"
+        - name: GPU_ID
+          value: "1"
+        - name: NODE_TYPE
+          value: "master"
+        - name: BACKEND_INSTANCE
+          value: "gpu1"
+        - name: GPU_TYPE
+          value: "RTX 2080 Ti"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_USER
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_DB
+        - name: DJANGO_SUPERUSER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: DJANGO_SUPERUSER_PASSWORD
+        envFrom:
+        - configMapRef:
+            name: app-config
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+            cpu: "4000m"
+            memory: "8Gi"
+          requests:
+            nvidia.com/gpu: 1
+            cpu: "2000m"
+            memory: "4Gi"
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 9898
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9898
+          initialDelaySeconds: 60
+          periodSeconds: 30
+
+---
+# Django Backend GPU 2 - Worker Node
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: django-backend-gpu2
+  namespace: face-recognition-system
+  labels:
+    app: django-backend
+    gpu-id: "gpu2"
+    component: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: django-backend
+      gpu-id: "gpu2"
+  template:
+    metadata:
+      labels:
+        app: django-backend
+        gpu-id: "gpu2"
+        component: backend
+        node-type: "worker"
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98
+      containers:
+      - name: django-backend
+        image: bwalidd/new-django:backend-v2
+        ports:
+        - containerPort: 9898
+        - containerPort: 6006
+        - containerPort: 8888
+        env:
+        - name: CUDA_VISIBLE_DEVICES
+          value: "0"
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "0"
+        - name: GPU_ID
+          value: "2"
+        - name: NODE_TYPE
+          value: "worker"
+        - name: BACKEND_INSTANCE
+          value: "gpu2"
+        - name: GPU_TYPE
+          value: "RTX 2080 Super"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_USER
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_DB
+        - name: DJANGO_SUPERUSER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: DJANGO_SUPERUSER_PASSWORD
+        envFrom:
+        - configMapRef:
+            name: app-config
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+            cpu: "4000m"
+            memory: "8Gi"
+          requests:
+            nvidia.com/gpu: 1
+            cpu: "2000m"
+            memory: "4Gi"
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 9898
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9898
+          initialDelaySeconds: 60
+          periodSeconds: 30
+
+---
+# Django Backend GPU 3 - Worker Node
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: django-backend-gpu3
+  namespace: face-recognition-system
+  labels:
+    app: django-backend
+    gpu-id: "gpu3"
+    component: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: django-backend
+      gpu-id: "gpu3"
+  template:
+    metadata:
+      labels:
+        app: django-backend
+        gpu-id: "gpu3"
+        component: backend
+        node-type: "worker"
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98
+      containers:
+      - name: django-backend
+        image: bwalidd/new-django:backend-v2
+        ports:
+        - containerPort: 9898
+        - containerPort: 6006
+        - containerPort: 8888
+        env:
+        - name: CUDA_VISIBLE_DEVICES
+          value: "1"
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "1"
+        - name: GPU_ID
+          value: "3"
+        - name: NODE_TYPE
+          value: "worker"
+        - name: BACKEND_INSTANCE
+          value: "gpu3"
+        - name: GPU_TYPE
+          value: "RTX 2080 Super"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_USER
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_DB
+        - name: DJANGO_SUPERUSER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: DJANGO_SUPERUSER_PASSWORD
+        envFrom:
+        - configMapRef:
+            name: app-config
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+            cpu: "4000m"
+            memory: "8Gi"
+          requests:
+            nvidia.com/gpu: 1
+            cpu: "2000m"
+            memory: "4Gi"
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 9898
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9898
+          initialDelaySeconds: 60
+          periodSeconds: 30
+
+---
+# =====================================================
+# SUPPORTING SERVICES - MOVED TO WORKER NODE
+# =====================================================
+
+# PostgreSQL Database - Worker Node
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgresql-database
+  namespace: face-recognition-system
+  labels:
+    app: postgresql
+    component: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgresql
+  template:
+    metadata:
+      labels:
+        app: postgresql
+        component: database
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # Worker node
+      containers:
+      - name: postgres
+        image: postgres:latest
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_DB
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_PASSWORD
+        - name: PGDATA
+          value: "/var/lib/postgresql/data/pgdata"
+        - name: PGUSER
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_USER
+        resources:
+          limits:
+            cpu: "2000m"
+            memory: "4Gi"
+          requests:
+            cpu: "1000m"
+            memory: "2Gi"
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"
+          initialDelaySeconds: 15
+          periodSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"
+          initialDelaySeconds: 45
+          periodSeconds: 10
+      volumes:
+      - name: postgres-data
+        emptyDir: {}  # Use persistent volume in production
+
+---
+# Redis Primary - Worker Node (with password and optimized config)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-primary
+  namespace: face-recognition-system
+  labels:
+    app: redis-primary
+    component: cache
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-primary
+  template:
+    metadata:
+      labels:
+        app: redis-primary
+        component: cache
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # Worker node
+      containers:
+      - name: redis
+        image: redis:latest
+        ports:
+        - containerPort: 6379
+        command:
+        - redis-server
+        - --requirepass
+        - admin
+        - --protected-mode
+        - "no"
+        - --maxmemory
+        - 512mb
+        - --maxmemory-policy
+        - allkeys-lru
+        - --save
+        - "900 1"
+        - --save
+        - "300 10"
+        - --save
+        - "60 10000"
+        - --appendonly
+        - "no"
+        resources:
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - -a
+            - admin
+            - ping
+          initialDelaySeconds: 15
+          periodSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - -a
+            - admin
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+
+---
+# Redis Channels - Worker Node (port 6380 with password)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-channels
+  namespace: face-recognition-system
+  labels:
+    app: redis-channels
+    component: cache
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-channels
+  template:
+    metadata:
+      labels:
+        app: redis-channels
+        component: cache
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # Worker node
+      containers:
+      - name: redis
+        image: redis:latest
+        ports:
+        - containerPort: 6380
+        command:
+        - redis-server
+        - --port
+        - "6380"
+        - --requirepass
+        - admin
+        - --protected-mode
+        - "no"
+        - --maxmemory
+        - 512mb
+        - --maxmemory-policy
+        - allkeys-lru
+        - --save
+        - "900 1"
+        - --save
+        - "300 10"
+        - --save
+        - "60 10000"
+        - --appendonly
+        - "no"
+        resources:
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - -p
+            - "6380"
+            - -a
+            - admin
+            - ping
+          initialDelaySeconds: 15
+          periodSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - -p
+            - "6380"
+            - -a
+            - admin
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+
+---
+# Celery Worker - Worker Node
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-worker
+  namespace: face-recognition-system
+  labels:
+    app: celery-worker
+    component: worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: celery-worker
+  template:
+    metadata:
+      labels:
+        app: celery-worker
+        component: worker
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # Worker node
+      containers:
+      - name: celery-worker
+        image: bwalidd/new-django:flower-celery
+        ports:
+        - containerPort: 5555
+        env:
+        - name: CELERY_BROKER_URL
+          value: "redis://:admin@redis-primary-service:6379/0"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_PASSWORD
+        envFrom:
+        - configMapRef:
+            name: app-config
+        resources:
+          limits:
+            cpu: "1000m"
+            memory: "2Gi"
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+        dependsOn:
+        - redis-primary
+        - postgresql-database
+
+---
+# React Frontend - Worker Node
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: react-frontend
+  namespace: face-recognition-system
+  labels:
+    app: react-frontend
+    component: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: react-frontend
+  template:
+    metadata:
+      labels:
+        app: react-frontend
+        component: frontend
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # Worker node
+      containers:
+      - name: frontend
+        image: bwalidd/new-django:frontend
+        ports:
+        - containerPort: 9999
+        env:
+        - name: CHOKIDAR_USEPOLLING
+          value: "true"
+        resources:
+          limits:
+            cpu: "1000m"
+            memory: "512Mi"
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+
+---
+# MediaMTX Primary - Worker Node (port 8554)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mediamtx-primary
+  namespace: face-recognition-system
+  labels:
+    app: mediamtx
+    component: streaming
+    instance: primary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mediamtx
+      instance: primary
+  template:
+    metadata:
+      labels:
+        app: mediamtx
+        component: streaming
+        instance: primary
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # Worker node
+      containers:
+      - name: mediamtx
+        image: bluenviron/mediamtx:latest
+        ports:
+        - containerPort: 8554
+        resources:
+          limits:
+            cpu: "2000m"
+            memory: "2Gi"
+          requests:
+            cpu: "1000m"
+            memory: "1Gi"
+
+---
+# MediaMTX Secondary - Worker Node (port 8555 internal, 8554 container)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mediamtx-secondary
+  namespace: face-recognition-system
+  labels:
+    app: mediamtx
+    component: streaming
+    instance: secondary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mediamtx
+      instance: secondary
+  template:
+    metadata:
+      labels:
+        app: mediamtx
+        component: streaming
+        instance: secondary
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # Worker node
+      containers:
+      - name: mediamtx
+        image: bluenviron/mediamtx:latest
+        ports:
+        - containerPort: 8554
+        resources:
+          limits:
+            cpu: "1500m"
+            memory: "1Gi"
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+
+---
+# MediaMTX Normal Stream - Worker Node (port 8556 internal, 8554 container)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mediamtx-normal
+  namespace: face-recognition-system
+  labels:
+    app: mediamtx
+    component: streaming
+    instance: normal
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mediamtx
+      instance: normal
+  template:
+    metadata:
+      labels:
+        app: mediamtx
+        component: streaming
+        instance: normal
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # Worker node
+      containers:
+      - name: mediamtx
+        image: bluenviron/mediamtx:latest
+        ports:
+        - containerPort: 8554
+        resources:
+          limits:
+            cpu: "1500m"
+            memory: "1Gi"
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+
+---
+# Janus Gateway - Worker Node (host network mode equivalent)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: janus-gateway
+  namespace: face-recognition-system
+  labels:
+    app: janus-gateway
+    component: signaling
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: janus-gateway
+  template:
+    metadata:
+      labels:
+        app: janus-gateway
+        component: signaling
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # Worker node
+      hostNetwork: true  # Equivalent to network_mode: "host"
+      containers:
+      - name: janus
+        image: canyan/janus-gateway:master
+        ports:
+        - containerPort: 8088
+        resources:
+          limits:
+            cpu: "2000m"
+            memory: "2Gi"
+          requests:
+            cpu: "1000m"
+            memory: "1Gi"
+        readinessProbe:
+          httpGet:
+            path: /janus/info
+            port: 8088
+          initialDelaySeconds: 40
+          periodSeconds: 30
+        livenessProbe:
+          httpGet:
+            path: /janus/info
+            port: 8088
+          initialDelaySeconds: 60
+          periodSeconds: 30
+
+---
+# COTURN Server - Worker Node (host network with expanded ports)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coturn-server
+  namespace: face-recognition-system
+  labels:
+    app: coturn
+    component: networking
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: coturn
+  template:
+    metadata:
+      labels:
+        app: coturn
+        component: networking
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # Worker node
+      hostNetwork: true  # Equivalent to network_mode: "host"
+      containers:
+      - name: coturn
+        image: coturn/coturn:latest
+        env:
+        - name: TZ
+          value: "UTC"
+        - name: EXTERNAL_IP
+          value: "34.60.157.241"  # Your stream IP
+        ports:
+        - containerPort: 3478
+          protocol: TCP
+        - containerPort: 3478
+          protocol: UDP
+        - containerPort: 5349
+          protocol: TCP
+        - containerPort: 5349
+          protocol: UDP
+        resources:
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+        readinessProbe:
+          tcpSocket:
+            port: 3478
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 3478
+---
+# =====================================================
+# SERVICES - EXPOSE ALL COMPONENTS
+# =====================================================
+
+# Django Backend GPU Services (Individual GPU endpoints)
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-gpu0-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: django-backend
+    gpu-id: "gpu0"
+  ports:
+  - protocol: TCP
+    port: 9898
+    targetPort: 9898
+    nodePort: 30801
+  type: NodePort
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-gpu1-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: django-backend
+    gpu-id: "gpu1"
+  ports:
+  - protocol: TCP
+    port: 9898
+    targetPort: 9898
+    nodePort: 30802
+  type: NodePort
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-gpu2-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: django-backend
+    gpu-id: "gpu2"
+  ports:
+  - protocol: TCP
+    port: 9898
+    targetPort: 9898
+    nodePort: 30803
+  type: NodePort
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-gpu3-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: django-backend
+    gpu-id: "gpu3"
+  ports:
+  - protocol: TCP
+    port: 9898
+    targetPort: 9898
+    nodePort: 30804
+  type: NodePort
+
+---
+# Main Backend Load Balancer
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-loadbalancer-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: django-backend
+  ports:
+  - protocol: TCP
+    port: 9898
+    targetPort: 9898
+    nodePort: 30898
+  type: NodePort
+
+---
+# Frontend Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: react-frontend
+  ports:
+  - protocol: TCP
+    port: 9999
+    targetPort: 9999
+    nodePort: 30999
+  type: NodePort
+
+---
+# MediaMTX Services (matching Docker Compose ports)
+apiVersion: v1
+kind: Service
+metadata:
+  name: mediamtx-primary-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: mediamtx
+    instance: primary
+  ports:
+  - protocol: TCP
+    port: 8554
+    targetPort: 8554
+    nodePort: 30554  # Maps to original port 8554
+  type: NodePort
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mediamtx-secondary-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: mediamtx
+    instance: secondary
+  ports:
+  - protocol: TCP
+    port: 8554
+    targetPort: 8554
+    nodePort: 30555  # Maps to original port 8555
+  type: NodePort
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mediamtx-normal-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: mediamtx
+    instance: normal
+  ports:
+  - protocol: TCP
+    port: 8554
+    targetPort: 8554
+    nodePort: 30556  # Maps to original port 8556
+  type: NodePort
+
+---
+# Celery Monitor Service (Flower)
+apiVersion: v1
+kind: Service
+metadata:
+  name: celery-monitor-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: celery-worker
+  ports:
+  - protocol: TCP
+    port: 5555
+    targetPort: 5555
+    nodePort: 30555
+  type: NodePort
+
+---
+# Internal Services (ClusterIP) - Match Docker Compose networking
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: postgresql
+  ports:
+  - protocol: TCP
+    port: 5432
+    targetPort: 5432
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-primary-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: redis-primary
+  ports:
+  - protocol: TCP
+    port: 6379
+    targetPort: 6379
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-channels-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: redis-channels
+  ports:
+  - protocol: TCP
+    port: 6380
+    targetPort: 6380
+  type: ClusterIP
+
+---
+# External Redis Services (matching Docker Compose external ports)
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-external-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: redis-primary
+  ports:
+  - protocol: TCP
+    port: 6379
+    targetPort: 6379
+    nodePort: 30379  # External access to Redis
+  type: NodePort
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-channels-external-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: redis-channels
+  ports:
+  - protocol: TCP
+    port: 6380
+    targetPort: 6380
+    nodePort: 30380  # External access to Redis Channels
+  type: NodePort
+
+---
+# PostgreSQL External Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-external-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: postgresql
+  ports:
+  - protocol: TCP
+    port: 5432
+    targetPort: 5432
+    nodePort: 30432  # External access to PostgreSQL
+  type: NodePort
+
+---
+# =====================================================
+# HORIZONTAL POD AUTOSCALERS
+# =====================================================
+
+# Autoscaler for Django Backends (GPU-aware)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: django-backend-hpa
+  namespace: face-recognition-system
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: django-backend-gpu0  # Can create separate HPAs for each GPU
+  minReplicas: 1
+  maxReplicas: 2  # Limited by GPU availability
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+---
+# Frontend Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: frontend-hpa
+  namespace: face-recognition-system
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: react-frontend
+  minReplicas: 1
+  maxReplicas: 4
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+
+---
+# Celery Worker Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: celery-hpa
+  namespace: face-recognition-system
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: celery-worker
+  minReplicas: 1
+  maxReplicas: 4
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 75
+
+---
+# =====================================================
+# CONFIGMAP FOR MONITORING AND STATUS
+# =====================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: system-status-config
+  namespace: face-recognition-system
+data:
+  endpoints.json: |
+    {
+      "gpu_backends": {
+        "gpu0": "http://NODE_IP:30801",
+        "gpu1": "http://NODE_IP:30802", 
+        "gpu2": "http://NODE_IP:30803",
+        "gpu3": "http://NODE_IP:30804"
+      },
+      "services": {
+        "frontend": "http://NODE_IP:30999",
+        "load_balancer": "http://NODE_IP:30898",
+        "celery_monitor": "http://NODE_IP:30555"
+      },
+      "streaming": {
+        "mediamtx_primary": "rtsp://NODE_IP:30554",
+        "mediamtx_secondary": "rtsp://NODE_IP:30555", 
+        "mediamtx_normal": "rtsp://NODE_IP:30556"
+      },
+      "external_data": {
+        "postgres": "postgresql://FaceApi:example@NODE_IP:30432/FaceApi",
+        "redis": "redis://:admin@NODE_IP:30379/0",
+        "redis_channels": "redis://:admin@NODE_IP:30380/0"
+      }
+    }
+  docker_compose_mapping.txt: |
+    Docker Compose → Kubernetes Port Mapping:
+    ==========================================
+    
+    Django Backend:
+    - Docker: 9898:9898 → K8s: 30898 (load balancer)
+    - GPU 0: 30801, GPU 1: 30802, GPU 2: 30803, GPU 3: 30804
+    
+    Frontend:
+    - Docker: 9999:9999 → K8s: 30999:9999
+    
+    PostgreSQL:
+    - Docker: 5432:5432 → K8s: 30432:5432 (external), 5432 (internal)
+    
+    Redis:
+    - Docker: 6379:6379 → K8s: 30379:6379 (external), 6379 (internal)
+    - Docker: 6380:6380 → K8s: 30380:6380 (external), 6380 (internal)
+    
+    MediaMTX:
+    - Docker: 8554:8554 → K8s: 30554:8554
+    - Docker: 8555:8554 → K8s: 30555:8554  
+    - Docker: 8556:8554 → K8s: 30556:8554
+    
+    Celery Monitor:
+    - Docker: 5555:5555 → K8s: 30555:5555
+    
+    COTURN:
+    - Docker: host network → K8s: hostNetwork: true
+    
+    Janus:
+    - Docker: host network → K8s: hostNetwork: true GPU_TYPE
+          value: "RTX 2080 Ti"
+        envFrom:
+        - configMapRef:
+            name: app-config
+        - secretRef:
+            name: app-secrets
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+            cpu: "4000m"
+            memory: "8Gi"
+          requests:
+            nvidia.com/gpu: 1
+            cpu: "2000m"
+            memory: "4Gi"
+        readinessProbe:
+          httpGet:
+            path: /health/
+            port: 9898
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health/
+            port: 9898
+          initialDelaySeconds: 60
+          periodSeconds: 30
+
+---
+# Django Backend GPU 2 - Worker Node
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: django-backend-gpu2
+  namespace: face-recognition-system
+  labels:
+    app: django-backend
+    gpu-id: "gpu2"
+    component: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: django-backend
+      gpu-id: "gpu2"
+  template:
+    metadata:
+      labels:
+        app: django-backend
+        gpu-id: "gpu2"
+        component: backend
+        node-type: "worker"
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98
+      containers:
+      - name: django-backend
+        image: bwalidd/new-django:backend-v2
+        ports:
+        - containerPort: 9898
+        - containerPort: 6006
+        - containerPort: 8888
+        env:
+        - name: CUDA_VISIBLE_DEVICES
+          value: "0"
+        - name: GPU_ID
+          value: "2"
+        - name: NODE_TYPE
+          value: "worker"
+        - name: BACKEND_INSTANCE
+          value: "gpu2"
+        - name: GPU_TYPE
+          value: "RTX 2080 Super"
+        envFrom:
+        - configMapRef:
+            name: app-config
+        - secretRef:
+            name: app-secrets
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+            cpu: "4000m"
+            memory: "8Gi"
+          requests:
+            nvidia.com/gpu: 1
+            cpu: "2000m"
+            memory: "4Gi"
+        readinessProbe:
+          httpGet:
+            path: /health/
+            port: 9898
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health/
+            port: 9898
+          initialDelaySeconds: 60
+          periodSeconds: 30
+
+---
+# Django Backend GPU 3 - Worker Node
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: django-backend-gpu3
+  namespace: face-recognition-system
+  labels:
+    app: django-backend
+    gpu-id: "gpu3"
+    component: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: django-backend
+      gpu-id: "gpu3"
+  template:
+    metadata:
+      labels:
+        app: django-backend
+        gpu-id: "gpu3"
+        component: backend
+        node-type: "worker"
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98
+      containers:
+      - name: django-backend
+        image: bwalidd/new-django:backend-v2
+        ports:
+        - containerPort: 9898
+        - containerPort: 6006
+        - containerPort: 8888
+        env:
+        - name: CUDA_VISIBLE_DEVICES
+          value: "1"
+        - name: GPU_ID
+          value: "3"
+        - name: NODE_TYPE
+          value: "worker"
+        - name: BACKEND_INSTANCE
+          value: "gpu3"
+        - name: GPU_TYPE
+          value: "RTX 2080 Super"
+        envFrom:
+        - configMapRef:
+            name: app-config
+        - secretRef:
+            name: app-secrets
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+            cpu: "4000m"
+            memory: "8Gi"
+          requests:
+            nvidia.com/gpu: 1
+            cpu: "2000m"
+            memory: "4Gi"
+        readinessProbe:
+          httpGet:
+            path: /health/
+            port: 9898
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health/
+            port: 9898
+          initialDelaySeconds: 60
+          periodSeconds: 30
+
+---
+# =====================================================
+# SUPPORTING SERVICES - DISTRIBUTED OPTIMALLY
+# =====================================================
+
+# PostgreSQL Database - MOVED TO WORKER NODE
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgresql-database
+  namespace: face-recognition-system
+  labels:
+    app: postgresql
+    component: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgresql
+  template:
+    metadata:
+      labels:
+        app: postgresql
+        component: database
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # MOVED TO WORKER NODE
+      containers:
+      - name: postgres
+        image: postgres:latest
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_DB
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_PASSWORD
+        resources:
+          limits:
+            cpu: "2000m"
+            memory: "4Gi"
+          requests:
+            cpu: "1000m"
+            memory: "2Gi"
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+      volumes:
+      - name: postgres-data
+        emptyDir: {}  # Use persistent volume in production
+
+---
+# Redis Primary - MOVED TO WORKER NODE
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-primary
+  namespace: face-recognition-system
+  labels:
+    app: redis-primary
+    component: cache
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-primary
+  template:
+    metadata:
+      labels:
+        app: redis-primary
+        component: cache
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # MOVED TO WORKER NODE
+      containers:
+      - name: redis
+        image: redis:latest
+        ports:
+        - containerPort: 6379
+        resources:
+          limits:
+            cpu: "1000m"
+            memory: "2Gi"
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+
+---
+# Redis Channels - Worker Node (stays here)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-channels
+  namespace: face-recognition-system
+  labels:
+    app: redis-channels
+    component: cache
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-channels
+  template:
+    metadata:
+      labels:
+        app: redis-channels
+        component: cache
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # Worker node
+      containers:
+      - name: redis
+        image: redis:latest
+        ports:
+        - containerPort: 6380
+        command: ["redis-server", "--port", "6380"]
+        resources:
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+
+---
+# Celery Worker - MOVED TO WORKER NODE
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-worker
+  namespace: face-recognition-system
+  labels:
+    app: celery-worker
+    component: worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: celery-worker
+  template:
+    metadata:
+      labels:
+        app: celery-worker
+        component: worker
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # MOVED TO WORKER NODE
+      containers:
+      - name: celery-worker
+        image: djangoreactfacerec-flower-celery
+        env:
+        - name: CELERY_BROKER_URL
+          value: "redis://redis-primary-service:6379/0"
+        envFrom:
+        - configMapRef:
+            name: app-config
+        resources:
+          limits:
+            cpu: "1000m"
+            memory: "2Gi"
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+
+---
+# React Frontend - MOVED TO WORKER NODE (distributed)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: react-frontend
+  namespace: face-recognition-system
+  labels:
+    app: react-frontend
+    component: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: react-frontend
+  template:
+    metadata:
+      labels:
+        app: react-frontend
+        component: frontend
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # MOVED TO WORKER NODE
+      containers:
+      - name: frontend
+        image: bwalidd/new-django:frontend
+        ports:
+        - containerPort: 9999
+        resources:
+          limits:
+            cpu: "1000m"
+            memory: "512Mi"
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+
+---
+# MediaMTX Primary - Worker Node (video processing)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mediamtx-primary
+  namespace: face-recognition-system
+  labels:
+    app: mediamtx
+    component: streaming
+    instance: primary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mediamtx
+      instance: primary
+  template:
+    metadata:
+      labels:
+        app: mediamtx
+        component: streaming
+        instance: primary
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # Worker node
+      containers:
+      - name: mediamtx
+        image: bluenviron/mediamtx:latest
+        ports:
+        - containerPort: 8554
+        resources:
+          limits:
+            cpu: "2000m"
+            memory: "2Gi"
+          requests:
+            cpu: "1000m"
+            memory: "1Gi"
+
+---
+# MediaMTX Secondary - Worker Node
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mediamtx-secondary
+  namespace: face-recognition-system
+  labels:
+    app: mediamtx
+    component: streaming
+    instance: secondary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mediamtx
+      instance: secondary
+  template:
+    metadata:
+      labels:
+        app: mediamtx
+        component: streaming
+        instance: secondary
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # Worker node
+      containers:
+      - name: mediamtx
+        image: bluenviron/mediamtx:latest
+        ports:
+        - containerPort: 8554
+        resources:
+          limits:
+            cpu: "1500m"
+            memory: "1Gi"
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+
+---
+# MediaMTX Normal Stream - Worker Node
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mediamtx-normal
+  namespace: face-recognition-system
+  labels:
+    app: mediamtx
+    component: streaming
+    instance: normal
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mediamtx
+      instance: normal
+  template:
+    metadata:
+      labels:
+        app: mediamtx
+        component: streaming
+        instance: normal
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # Worker node
+      containers:
+      - name: mediamtx
+        image: bluenviron/mediamtx:latest
+        ports:
+        - containerPort: 8554
+        resources:
+          limits:
+            cpu: "1500m"
+            memory: "1Gi"
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+
+---
+# Janus Gateway - Worker Node (WebRTC signaling)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: janus-gateway
+  namespace: face-recognition-system
+  labels:
+    app: janus-gateway
+    component: signaling
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: janus-gateway
+  template:
+    metadata:
+      labels:
+        app: janus-gateway
+        component: signaling
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # Worker node
+      containers:
+      - name: janus
+        image: canyan/janus-gateway:master
+        resources:
+          limits:
+            cpu: "2000m"
+            memory: "2Gi"
+          requests:
+            cpu: "1000m"
+            memory: "1Gi"
+
+---
+# COTURN Server - Worker Node (NAT traversal)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coturn-server
+  namespace: face-recognition-system
+  labels:
+    app: coturn
+    component: networking
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: coturn
+  template:
+    metadata:
+      labels:
+        app: coturn
+        component: networking
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: bluedovve-ms-7b98  # Worker node
+      containers:
+      - name: coturn
+        image: coturn/coturn:latest
+        resources:
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+
+---
+# =====================================================
+# SERVICES - EXPOSE ALL COMPONENTS
+# =====================================================
+
+# Django Backend GPU Services (Individual GPU endpoints)
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-gpu0-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: django-backend
+    gpu-id: "gpu0"
+  ports:
+  - protocol: TCP
+    port: 9898
+    targetPort: 9898
+    nodePort: 30801
+  type: NodePort
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-gpu1-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: django-backend
+    gpu-id: "gpu1"
+  ports:
+  - protocol: TCP
+    port: 9898
+    targetPort: 9898
+    nodePort: 30802
+  type: NodePort
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-gpu2-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: django-backend
+    gpu-id: "gpu2"
+  ports:
+  - protocol: TCP
+    port: 9898
+    targetPort: 9898
+    nodePort: 30803
+  type: NodePort
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-gpu3-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: django-backend
+    gpu-id: "gpu3"
+  ports:
+  - protocol: TCP
+    port: 9898
+    targetPort: 9898
+    nodePort: 30804
+  type: NodePort
+
+---
+# Main Backend Load Balancer
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-loadbalancer-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: django-backend
+  ports:
+  - protocol: TCP
+    port: 9898
+    targetPort: 9898
+    nodePort: 30898
+  type: NodePort
+
+---
+# Frontend Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: react-frontend
+  ports:
+  - protocol: TCP
+    port: 9999
+    targetPort: 9999
+    nodePort: 30999
+  type: NodePort
+
+---
+# MediaMTX Services
+apiVersion: v1
+kind: Service
+metadata:
+  name: mediamtx-primary-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: mediamtx
+    instance: primary
+  ports:
+  - protocol: TCP
+    port: 8554
+    targetPort: 8554
+    nodePort: 30554
+  type: NodePort
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mediamtx-secondary-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: mediamtx
+    instance: secondary
+  ports:
+  - protocol: TCP
+    port: 8554
+    targetPort: 8554
+    nodePort: 30555
+  type: NodePort
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mediamtx-normal-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: mediamtx
+    instance: normal
+  ports:
+  - protocol: TCP
+    port: 8554
+    targetPort: 8554
+    nodePort: 30556
+  type: NodePort
+
+---
+# Celery Monitor Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: celery-monitor-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: celery-worker
+  ports:
+  - protocol: TCP
+    port: 5555
+    targetPort: 5555
+    nodePort: 30555
+  type: NodePort
+
+---
+# Internal Services (ClusterIP)
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: postgresql
+  ports:
+  - protocol: TCP
+    port: 5432
+    targetPort: 5432
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-primary-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: redis-primary
+  ports:
+  - protocol: TCP
+    port: 6379
+    targetPort: 6379
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-channels-service
+  namespace: face-recognition-system
+spec:
+  selector:
+    app: redis-channels
+  ports:
+  - protocol: TCP
+    port: 6380
+    targetPort: 6380
+  type: ClusterIP
+
+---
+# =====================================================
+# HORIZONTAL POD AUTOSCALERS
+# =====================================================
+
+# Autoscaler for Django Backends
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: django-backend-hpa
+  namespace: face-recognition-system
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: django-backend-gpu0  # Can create separate HPAs for each GPU
+  minReplicas: 1
+  maxReplicas: 2  # Limited by GPU availability
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
