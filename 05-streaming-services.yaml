@@ -1,5 +1,5 @@
 # 05-streaming-services.yaml
-# MediaMTX, Janus, and COTURN Services
+# MediaMTX, Janus, and COTURN Services - Fixed Ports
 
 # MediaMTX Primary - Worker Node (port 8554)
 apiVersion: apps/v1
@@ -30,7 +30,14 @@ spec:
       - name: mediamtx
         image: bluenviron/mediamtx:latest
         ports:
-        - containerPort: 8554
+        - containerPort: 8554  # Primary uses standard port 8554
+        env:
+        - name: MTX_RTSPADDRESS
+          value: ":8554"
+        - name: MTX_INSTANCE
+          value: "primary"
+        - name: MTX_PROTOCOLS
+          value: "tcp"
         resources:
           limits:
             cpu: "2000m"
@@ -38,9 +45,19 @@ spec:
           requests:
             cpu: "1000m"
             memory: "1Gi"
+        readinessProbe:
+          tcpSocket:
+            port: 8554
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 8554
+          initialDelaySeconds: 20
+          periodSeconds: 30
 
 ---
-# MediaMTX Secondary - Worker Node (port 8555 internal, 8554 container)
+# MediaMTX Secondary - Worker Node (port 8555)
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -69,7 +86,14 @@ spec:
       - name: mediamtx
         image: bluenviron/mediamtx:latest
         ports:
-        - containerPort: 8554
+        - containerPort: 8555  # Secondary uses port 8555
+        env:
+        - name: MTX_RTSPADDRESS
+          value: ":8555"
+        - name: MTX_INSTANCE
+          value: "secondary"
+        - name: MTX_PROTOCOLS
+          value: "tcp"
         resources:
           limits:
             cpu: "1500m"
@@ -77,9 +101,19 @@ spec:
           requests:
             cpu: "500m"
             memory: "512Mi"
+        readinessProbe:
+          tcpSocket:
+            port: 8555
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 8555
+          initialDelaySeconds: 20
+          periodSeconds: 30
 
 ---
-# MediaMTX Normal Stream - Worker Node (port 8556 internal, 8554 container)
+# MediaMTX Normal Stream - Worker Node (port 8556)
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -108,7 +142,14 @@ spec:
       - name: mediamtx
         image: bluenviron/mediamtx:latest
         ports:
-        - containerPort: 8554
+        - containerPort: 8556  # Normal uses port 8556
+        env:
+        - name: MTX_RTSPADDRESS
+          value: ":8556"
+        - name: MTX_INSTANCE
+          value: "normal"
+        - name: MTX_PROTOCOLS
+          value: "tcp"
         resources:
           limits:
             cpu: "1500m"
@@ -116,6 +157,16 @@ spec:
           requests:
             cpu: "500m"
             memory: "512Mi"
+        readinessProbe:
+          tcpSocket:
+            port: 8556
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 8556
+          initialDelaySeconds: 20
+          periodSeconds: 30
 
 ---
 # Janus Gateway - Worker Node (host network mode)
@@ -146,6 +197,9 @@ spec:
         image: canyan/janus-gateway:master
         ports:
         - containerPort: 8088
+        env:
+        - name: JANUS_CONFIG_DIR
+          value: "/opt/janus/etc/janus"
         resources:
           limits:
             cpu: "2000m"
@@ -198,6 +252,23 @@ spec:
           value: "UTC"
         - name: EXTERNAL_IP
           value: "34.60.157.241"  # Your stream IP
+        - name: LISTENING_PORT
+          value: "3478"
+        - name: TLS_LISTENING_PORT
+          value: "5349"
+        - name: RELAY_IP
+          value: "34.60.157.241"
+        command:
+        - turnserver
+        - --listening-port=3478
+        - --tls-listening-port=5349
+        - --min-port=10000
+        - --max-port=20000
+        - --verbose
+        - --fingerprint
+        - --lt-cred-mech
+        - --realm=face-recognition
+        - --external-ip=34.60.157.241
         ports:
         - containerPort: 3478
           protocol: TCP
@@ -224,3 +295,58 @@ spec:
             port: 3478
           initialDelaySeconds: 30
           periodSeconds: 30
+
+---
+# Additional Janus Service (for external access)
+apiVersion: v1
+kind: Service
+metadata:
+  name: janus-service
+  namespace: face-recognition-system
+  labels:
+    component: signaling
+spec:
+  selector:
+    app: janus-gateway
+  ports:
+  - protocol: TCP
+    port: 8088
+    targetPort: 8088
+    nodePort: 30088
+    name: janus-http
+  type: NodePort
+
+---
+# Additional COTURN Service (for external access)
+apiVersion: v1
+kind: Service
+metadata:
+  name: coturn-service
+  namespace: face-recognition-system
+  labels:
+    component: networking
+spec:
+  selector:
+    app: coturn
+  ports:
+  - protocol: TCP
+    port: 3478
+    targetPort: 3478
+    nodePort: 30478
+    name: coturn-tcp
+  - protocol: UDP
+    port: 3478
+    targetPort: 3478
+    nodePort: 30478
+    name: coturn-udp
+  - protocol: TCP
+    port: 5349
+    targetPort: 5349
+    nodePort: 30349
+    name: coturn-tls-tcp
+  - protocol: UDP
+    port: 5349
+    targetPort: 5349
+    nodePort: 30349
+    name: coturn-tls-udp
+  type: NodePort
