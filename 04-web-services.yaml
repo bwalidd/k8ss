@@ -25,7 +25,7 @@ spec:
         kubernetes.io/hostname: bluedovve-ms-7b98  # Worker node
       containers:
       - name: frontend
-        image: djangoreactfacerec-front
+        image: bwalidd/new-django:frontend
         ports:
         - containerPort: 9999
         env:
@@ -64,7 +64,7 @@ spec:
         kubernetes.io/hostname: bluedovve-ms-7b98  # Worker node
       containers:
       - name: celery-worker
-        image: djangoreactfacerec-flower-celery
+        image: bwalidd/new-django:flower-celery
         ports:
         - containerPort: 5555
         env:

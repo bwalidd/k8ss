@@ -1707,7 +1707,7 @@ spec:
         kubernetes.io/hostname: bluedovve-ms-7b98  # MOVED TO WORKER NODE
       containers:
       - name: celery-worker
-        image: djangoreactfacerec-flower-celery
+        image: bwalidd/new-django:flower-celery
         env:
         - name: CELERY_BROKER_URL
           value: "redis://redis-primary-service:6379/0"

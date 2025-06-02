@@ -29,7 +29,7 @@ spec:
         kubernetes.io/hostname: bluedove2-ms-7b98
       containers:
       - name: django-backend
-        image: djangoreactfacerec-backend
+        image: bwalidd/new-django:backend-v2
         ports:
         - containerPort: 9898
         - containerPort: 6006  # TensorBoard
@@ -121,7 +121,7 @@ spec:
         kubernetes.io/hostname: bluedove2-ms-7b98
       containers:
       - name: django-backend
-        image: djangoreactfacerec-backend
+        image: bwalidd/new-django:backend-v2
         ports:
         - containerPort: 9898
         - containerPort: 6006
@@ -213,7 +213,7 @@ spec:
         kubernetes.io/hostname: bluedovve-ms-7b98
       containers:
       - name: django-backend
-        image: djangoreactfacerec-backend
+        image: bwalidd/new-django:backend-v2
         ports:
         - containerPort: 9898
         - containerPort: 6006
@@ -305,7 +305,7 @@ spec:
         kubernetes.io/hostname: bluedovve-ms-7b98
       containers:
       - name: django-backend
-        image: djangoreactfacerec-backend
+        image: bwalidd/new-django:backend-v2
         ports:
         - containerPort: 9898
         - containerPort: 6006
